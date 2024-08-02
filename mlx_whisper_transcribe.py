@@ -24,7 +24,6 @@ TASK_VERBS = {
     "Translate": "Translating"
 }
 
-DEVICE = "mps" if mx.metal.is_available() else "cpu"
 MODELS = {
     "Tiny (Q4)": "mlx-community/whisper-tiny-mlx-q4",
     "Large v3": "mlx-community/whisper-large-v3-mlx",
@@ -37,6 +36,20 @@ LOCAL_DIR.mkdir(exist_ok=True)
 SAVE_DIR = LOCAL_DIR / "output"
 SAVE_DIR.mkdir(exist_ok=True)
 
+# Optimize for M1 Mac
+if mx.metal.is_available():
+    mx.set_default_device(mx.Device(mx.DeviceType.gpu))
+    st.success("Using Metal backend on M1 Mac")
+else:
+    st.warning("Metal backend not available. Performance may be suboptimal.")
+
+def log_memory_usage():
+    if mx.metal.is_available():
+        st.text(f"Active memory: {mx.metal.get_active_memory() / 1e9:.2f} GB")
+        st.text(f"Peak memory: {mx.metal.get_peak_memory() / 1e9:.2f} GB")
+    else:
+        st.text("Memory usage logging not available for non-Metal devices.")
+
 @st.cache_data
 def load_lottie_url(url: str) -> Dict[str, Any]:
     try:
@@ -46,7 +59,6 @@ def load_lottie_url(url: str) -> Dict[str, Any]:
     except requests.RequestException as e:
         logging.error(f"Failed to load Lottie animation: {e}")
         return None
-
 
 def prepare_audio(audio_path: str) -> mx.array:
     command = [
@@ -93,6 +105,41 @@ def process_audio(model_path: str, audio: mx.array, task: str) -> Dict[str, Any]
     except Exception as e:
         logging.error(f"Unexpected error in mlx_whisper.{task}: {e}")
         raise
+
+def process_in_batches(model_path: str, audio: mx.array, task: str, batch_duration: float = 30.0) -> Dict[str, Any]:
+    sample_rate = 16000  # Assuming 16kHz sample rate
+    batch_size = int(batch_duration * sample_rate)
+    num_batches = len(audio) // batch_size + (1 if len(audio) % batch_size else 0)
+    
+    all_segments = []
+    full_text = []
+    
+    for i in range(num_batches):
+        start = i * batch_size
+        end = min((i + 1) * batch_size, len(audio))
+        batch = audio[start:end]
+        
+        batch_results = process_audio(model_path, batch, task)
+        
+        # Adjust timestamps
+        for segment in batch_results["segments"]:
+            segment["start"] += i * batch_duration
+            segment["end"] += i * batch_duration
+        
+        all_segments.extend(batch_results["segments"])
+        full_text.append(batch_results["text"])
+        
+        # Log memory usage after each batch
+        log_memory_usage()
+        
+        # Clear cache to free up memory
+        if mx.metal.is_available():
+            mx.metal.clear_cache()
+    
+    return {
+        "segments": all_segments,
+        "text": " ".join(full_text)
+    }
 
 def write_subtitles(segments: List[Dict[str, Any]], format: str, output_file: str) -> None:
     with open(output_file, "w", encoding="utf-8") as f:
@@ -156,8 +203,8 @@ def main():
                 # Prepare audio
                 audio = prepare_audio(input_path)
                 
-                # Process audio
-                results = process_audio(MODEL_NAME, audio, task.lower())
+                # Process audio in batches
+                results = process_in_batches(MODEL_NAME, audio, task.lower())
                 
                 # Display results
                 col3, col4 = st.columns(2)
@@ -182,6 +229,9 @@ def main():
                 
                 # Create download link
                 st.markdown(create_download_link(zip_path, "Download Transcripts"), unsafe_allow_html=True)
+                
+                # Log final memory usage
+                log_memory_usage()
             
             except Exception as e:
                 st.error(f"An error occurred: {str(e)}")
