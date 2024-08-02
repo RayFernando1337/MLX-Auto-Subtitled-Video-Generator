@@ -60,6 +60,7 @@ def load_lottie_url(url: str) -> Dict[str, Any]:
         logging.error(f"Failed to load Lottie animation: {e}")
         return None
 
+
 def prepare_audio(audio_path: str) -> mx.array:
     command = [
         "ffmpeg",
@@ -100,46 +101,14 @@ def process_audio(model_path: str, audio: mx.array, task: str) -> Dict[str, Any]
         else:
             raise ValueError(f"Unsupported task: {task}")
         
+        log_memory_usage()
+        clear_mlx_cache()
+        
         logging.info(f"{task.capitalize()} completed successfully")
         return results
     except Exception as e:
         logging.error(f"Unexpected error in mlx_whisper.{task}: {e}")
         raise
-
-def process_in_batches(model_path: str, audio: mx.array, task: str, batch_duration: float = 30.0) -> Dict[str, Any]:
-    sample_rate = 16000  # Assuming 16kHz sample rate
-    batch_size = int(batch_duration * sample_rate)
-    num_batches = len(audio) // batch_size + (1 if len(audio) % batch_size else 0)
-    
-    all_segments = []
-    full_text = []
-    
-    for i in range(num_batches):
-        start = i * batch_size
-        end = min((i + 1) * batch_size, len(audio))
-        batch = audio[start:end]
-        
-        batch_results = process_audio(model_path, batch, task)
-        
-        # Adjust timestamps
-        for segment in batch_results["segments"]:
-            segment["start"] += i * batch_duration
-            segment["end"] += i * batch_duration
-        
-        all_segments.extend(batch_results["segments"])
-        full_text.append(batch_results["text"])
-        
-        # Log memory usage after each batch
-        log_memory_usage()
-        
-        # Clear cache to free up memory
-        if mx.metal.is_available():
-            mx.metal.clear_cache()
-    
-    return {
-        "segments": all_segments,
-        "text": " ".join(full_text)
-    }
 
 def write_subtitles(segments: List[Dict[str, Any]], format: str, output_file: str) -> None:
     with open(output_file, "w", encoding="utf-8") as f:
@@ -163,7 +132,12 @@ def create_download_link(file_path: str, link_text: str) -> str:
         href = f'<a href="data:file/zip;base64,{b64}" download="{os.path.basename(file_path)}">{link_text}</a>'
     return href
 
+def clear_mlx_cache():
+    if mx.metal.is_available():
+        mx.metal.clear_cache()
+
 def main():
+    log_memory_usage()
     col1, col2 = st.columns([1, 3])
     
     with col1:
@@ -195,6 +169,7 @@ def main():
     if input_file and st.button(task):
         with st.spinner(f"{TASK_VERBS[task]} the video using {selected_model} model..."):
             try:
+                log_memory_usage()
                 # Save uploaded file
                 input_path = str(SAVE_DIR / "input.mp4")
                 with open(input_path, "wb") as f:
@@ -202,9 +177,12 @@ def main():
                 
                 # Prepare audio
                 audio = prepare_audio(input_path)
+
+                log_memory_usage()
+                clear_mlx_cache()
                 
-                # Process audio in batches
-                results = process_in_batches(MODEL_NAME, audio, task.lower())
+                # Process audio
+                results = process_audio(MODEL_NAME, audio, task.lower())
                 
                 # Display results
                 col3, col4 = st.columns(2)
@@ -217,6 +195,9 @@ def main():
                 write_subtitles(results["segments"], "vtt", vtt_path)
                 write_subtitles(results["segments"], "srt", srt_path)
                 
+                log_memory_usage()
+                clear_mlx_cache()
+                
                 with col4:
                     st.text_area("Transcription", results["text"], height=300)
                     st.success(f"{task} completed successfully using {selected_model} model!")
@@ -227,12 +208,15 @@ def main():
                     for file in [vtt_path, srt_path]:
                         zipf.write(file, os.path.basename(file))
                 
+                log_memory_usage()
+                clear_mlx_cache()
+                
                 # Create download link
                 st.markdown(create_download_link(zip_path, "Download Transcripts"), unsafe_allow_html=True)
-                
+            
                 # Log final memory usage
                 log_memory_usage()
-            
+
             except Exception as e:
                 st.error(f"An error occurred: {str(e)}")
                 logging.exception("Error in main processing loop")
