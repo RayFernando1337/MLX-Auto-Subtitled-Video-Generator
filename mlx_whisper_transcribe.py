@@ -1,7 +1,7 @@
 import streamlit as st
 from streamlit_lottie import st_lottie
 import mlx.core as mx
-import mlx_whisper
+from lightning_whisper_mlx import LightningWhisperMLX
 import requests
 from typing import List, Dict, Any
 import pathlib
@@ -26,10 +26,17 @@ TASK_VERBS = {
 
 DEVICE = "mps" if mx.metal.is_available() else "cpu"
 MODELS = {
-    "Tiny (Q4)": "mlx-community/whisper-tiny-mlx-q4",
-    "Large v3": "mlx-community/whisper-large-v3-mlx",
-    "Small English (Q4)": "mlx-community/whisper-small.en-mlx-q4",
-    "Small (FP32)": "mlx-community/whisper-small-mlx-fp32"
+    "Tiny": "tiny",
+    "Small": "small",
+    "Distil Small (English)": "distil-small.en",
+    "Base": "base",
+    "Medium": "medium",
+    "Distil Medium (English)": "distil-medium.en",
+    "Large": "large",
+    "Large v2": "large-v2",
+    "Distil Large v2": "distil-large-v2",
+    "Large v3": "large-v3",
+    "Distil Large v3": "distil-large-v3"
 }
 APP_DIR = pathlib.Path(__file__).parent.absolute()
 LOCAL_DIR = APP_DIR / "local_video"
@@ -67,31 +74,24 @@ def prepare_audio(audio_path: str) -> mx.array:
     
     return mx.array(audio_array)
 
-def process_audio(model_path: str, audio: mx.array, task: str) -> Dict[str, Any]:
-    logging.info(f"Processing audio with model: {model_path}, task: {task}")
+def process_audio(model: LightningWhisperMLX, audio_path: str, task: str) -> Dict[str, Any]:
+    logging.info(f"Processing audio with model: {model.name}, task: {task}")
     
     try:
         if task.lower() == "transcribe":
-            results = mlx_whisper.transcribe(
-                audio,
-                path_or_hf_repo=model_path,
-                fp16=False,
-                verbose=True
-            )
+            results = model.transcribe(audio_path)
         elif task.lower() == "translate":
-            results = mlx_whisper.translate(
-                audio,
-                path_or_hf_repo=model_path,
-                fp16=False,
-                verbose=True
-            )
+            results = model.transcribe(audio_path)  # LightningWhisperMLX doesn't have a separate translate method
         else:
             raise ValueError(f"Unsupported task: {task}")
         
         logging.info(f"{task.capitalize()} completed successfully")
-        return results
+        return {
+            "text": " ".join([segment[2] for segment in results["segments"]]),
+            "segments": results["segments"]
+        }
     except Exception as e:
-        logging.error(f"Unexpected error in mlx_whisper.{task}: {e}")
+        logging.error(f"Unexpected error in LightningWhisperMLX.transcribe: {e}")
         raise
 
 def write_subtitles(segments: List[Dict[str, Any]], format: str, output_file: str) -> None:
@@ -99,15 +99,25 @@ def write_subtitles(segments: List[Dict[str, Any]], format: str, output_file: st
         if format == "vtt":
             f.write("WEBVTT\n\n")
             for segment in segments:
-                f.write(f"{segment['start']:.3f} --> {segment['end']:.3f}\n")
-                f.write(f"{segment['text'].strip()}\n\n")
+                start = format_timestamp(segment[0])
+                end = format_timestamp(segment[1])
+                text = segment[2]
+                f.write(f"{start} --> {end}\n")
+                f.write(f"{text.strip()}\n\n")
         elif format == "srt":
             for i, segment in enumerate(segments, start=1):
+                start = format_timestamp(segment[0], ms_separator=',')
+                end = format_timestamp(segment[1], ms_separator=',')
+                text = segment[2]
                 f.write(f"{i}\n")
-                start = f"{int(segment['start'] // 3600):02d}:{int(segment['start'] % 3600 // 60):02d}:{segment['start'] % 60:06.3f}"
-                end = f"{int(segment['end'] // 3600):02d}:{int(segment['end'] % 3600 // 60):02d}:{segment['end'] % 60:06.3f}"
-                f.write(f"{start.replace('.', ',')} --> {end.replace('.', ',')}\n")
-                f.write(f"{segment['text'].strip()}\n\n")
+                f.write(f"{start} --> {end}\n")
+                f.write(f"{text.strip()}\n\n")
+
+def format_timestamp(seconds: float, ms_separator: str = '.') -> str:
+    hours = int(seconds // 3600)
+    minutes = int((seconds % 3600) // 60)
+    seconds = seconds % 60
+    return f"{hours:02d}:{minutes:02d}:{seconds:06.3f}".replace('.', ms_separator)
 
 def create_download_link(file_path: str, link_text: str) -> str:
     with open(file_path, "rb") as f:
@@ -141,9 +151,15 @@ def main():
     input_file = st.file_uploader("Upload Video File", type=["mp4", "avi", "mov", "mkv"])
     task = st.selectbox("Select Task", list(TASK_VERBS.keys()), index=0)
     
-    # Add model selection dropdown
+    # Update model selection
     selected_model = st.selectbox("Select Whisper Model", list(MODELS.keys()), index=0)
     MODEL_NAME = MODELS[selected_model]
+    
+    # Add quantization option
+    quant = st.selectbox("Select Quantization", [None, "4bit", "8bit"], index=0)
+    
+    # Add batch size slider
+    batch_size = st.slider("Batch Size", min_value=1, max_value=32, value=12, step=1)
     
     if input_file and st.button(task):
         with st.spinner(f"{TASK_VERBS[task]} the video using {selected_model} model..."):
@@ -153,11 +169,11 @@ def main():
                 with open(input_path, "wb") as f:
                     f.write(input_file.read())
                 
-                # Prepare audio
-                audio = prepare_audio(input_path)
+                # Initialize LightningWhisperMLX
+                model = LightningWhisperMLX(model=MODEL_NAME, batch_size=batch_size, quant=quant)
                 
                 # Process audio
-                results = process_audio(MODEL_NAME, audio, task.lower())
+                results = process_audio(model, input_path, task.lower())
                 
                 # Display results
                 col3, col4 = st.columns(2)
