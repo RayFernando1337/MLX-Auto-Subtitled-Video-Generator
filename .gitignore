@@ -2,3 +2,4 @@ pages/local_video*
 local_video*
 __pycache__
 mlx_models*
+.DS_Store
