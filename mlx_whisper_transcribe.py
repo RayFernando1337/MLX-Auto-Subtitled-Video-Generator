@@ -219,6 +219,15 @@ def render_model_selection():
         
         Ideal for processing longer videos or when you need quick results without sacrificing too much accuracy.
         """)
+    if selected_model == "Large v3 Turbo":
+        st.info("""
+        **Large v3 Turbo**
+        
+        This new model offers significant performance improvements:
+        - Transcribes 12 minutes in 14 seconds on an M2 Ultra (~50X faster than real time)
+        - Significantly smaller than the Large v3 model (809M vs 1550M)
+        - It is multilingual
+        """)
     if selected_model in ["Small English (Q4)", "Distil Large v3 (English)"]:
         return MODELS[selected_model], True
     else:
