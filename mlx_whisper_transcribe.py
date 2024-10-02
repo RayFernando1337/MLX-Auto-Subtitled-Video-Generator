@@ -23,7 +23,8 @@ MODELS = {
     "Large v3": "mlx-community/whisper-large-v3-mlx",
     "Small English (Q4)": "mlx-community/whisper-small.en-mlx-q4",
     "Small (FP32)": "mlx-community/whisper-small-mlx-fp32",
-    "Distil Large v3 (English)": "mlx-community/distil-whisper-large-v3"
+    "Distil Large v3 (English)": "mlx-community/distil-whisper-large-v3",
+    "Large v3 Turbo": "mlx-community/whisper-large-v3-turbo"
 }
 APP_DIR = pathlib.Path(__file__).parent.absolute()
 LOCAL_DIR = APP_DIR / "local_video"
