@@ -207,7 +207,7 @@ def render_header():
         """)
 
 def render_model_selection():
-    selected_model = st.selectbox("Select Whisper Model", list(MODELS.keys()), index=4)
+    selected_model = st.selectbox("Select Whisper Model", list(MODELS.keys()), index=5)
     if selected_model == "Distil Large v3 (English)":
         st.info("""
         **Distil Large v3 Model**
