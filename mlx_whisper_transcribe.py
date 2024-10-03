@@ -23,7 +23,8 @@ MODELS = {
     "Large v3": "mlx-community/whisper-large-v3-mlx",
     "Small English (Q4)": "mlx-community/whisper-small.en-mlx-q4",
     "Small (FP32)": "mlx-community/whisper-small-mlx-fp32",
-    "Distil Large v3 (English)": "mlx-community/distil-whisper-large-v3"
+    "Distil Large v3 (English)": "mlx-community/distil-whisper-large-v3",
+    "Large v3 Turbo": "mlx-community/whisper-large-v3-turbo"
 }
 APP_DIR = pathlib.Path(__file__).parent.absolute()
 LOCAL_DIR = APP_DIR / "local_video"
@@ -217,6 +218,15 @@ def render_model_selection():
         - Provides a great balance between speed and accuracy
         
         Ideal for processing longer videos or when you need quick results without sacrificing too much accuracy.
+        """)
+    if selected_model == "Large v3 Turbo":
+        st.info("""
+        **Large v3 Turbo**
+        
+        This new model offers significant performance improvements:
+        - Transcribes 12 minutes in 14 seconds on an M2 Ultra (~50X faster than real time)
+        - Significantly smaller than the Large v3 model (809M vs 1550M)
+        - It is multilingual
         """)
     if selected_model in ["Small English (Q4)", "Distil Large v3 (English)"]:
         return MODELS[selected_model], True
