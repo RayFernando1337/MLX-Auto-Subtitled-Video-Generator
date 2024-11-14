@@ -37,6 +37,7 @@ If you don't have Conda installed on your Mac, you can follow the [Ultimate Guid
 
 3. Install the required dependencies:
    ```
+   xcode-select --install
    pip install -r requirements.txt
    ```
 

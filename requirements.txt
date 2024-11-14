@@ -4,3 +4,4 @@ mlx
 mlx-whisper
 requests
 numpy
+watchdog
