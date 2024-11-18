@@ -1,4 +1,4 @@
-streamlit
+streamlit>=1.39.0
 streamlit-lottie
 mlx
 mlx-whisper
