@@ -43,7 +43,8 @@ LANGUAGES = {
     "Russian": "ru",
     "Chinese": "zh",
     "Japanese": "ja",
-    "Korean": "ko"
+    "Korean": "ko",
+    "Hebrew": "he"
 }
 
 # Utility functions
