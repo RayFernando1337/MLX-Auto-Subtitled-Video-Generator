@@ -57,7 +57,9 @@ If you don't have Conda installed on your Mac, you can follow the [Ultimate Guid
 
 To run the Streamlit application, use the following command:
 
-`streamlit run mlx_whisper_transcribe.py`
+```
+streamlit run mlx_whisper_transcribe.py
+```
 
 
 ## Features
