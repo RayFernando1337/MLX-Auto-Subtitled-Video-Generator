@@ -260,7 +260,7 @@ def process_video(input_file, model_name, language):
         
         col3, col4 = st.columns(2)
         with col3:
-            st.video(input_file)
+            st.video(input_file, subtitles=vtt_path)
         with col4:
             st.text_area("Transcription", results["text"], height=300)
         
